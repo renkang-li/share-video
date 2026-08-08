@@ -1,3 +1,5 @@
+import Player from 'xgplayer'
+import 'xgplayer/dist/index.min.css'
 import './styles.css'
 
 const queryParams = new URLSearchParams(window.location.search)
@@ -8,6 +10,7 @@ const app = document.querySelector('#app')
 const state = {
   videos: [],
   selectedVideoId: '',
+  player: null,
   uploadRequest: null,
   isUploading: false
 }
@@ -19,9 +22,9 @@ app.innerHTML = `
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">▶</div>
           <div class="brand-copy">
-            <span class="eyebrow">私人视频库</span>
-            <h1>打开即看</h1>
-            <p>选择视频即可在线播放，复制链接就能分享。</p>
+            <span class="eyebrow">私人视频空间</span>
+            <h1>视频库</h1>
+            <p>选一部视频，马上开始观看。</p>
           </div>
         </div>
 
@@ -43,17 +46,17 @@ app.innerHTML = `
       <div class="directory-layout">
         <section class="player-panel" aria-label="视频播放器">
           <div class="player-wrap">
-            <video id="player" controls playsinline preload="metadata"></video>
+            <div id="player" aria-label="视频播放器"></div>
             <div id="playerPlaceholder" class="player-placeholder">
               <div class="placeholder-icon">▶</div>
-              <strong>选择视频开始播放</strong>
-              <span>从下方目录选择一个视频</span>
+              <strong>选一部视频开始播放</strong>
+              <span>支持在线播放，也可以复制链接分享</span>
             </div>
           </div>
 
           <div class="player-info">
             <div class="now-playing">
-              <span class="eyebrow">正在播放</span>
+              <span class="eyebrow">当前播放</span>
               <div class="player-heading-row">
                 <h2 id="videoTitle">尚未选择视频</h2>
               </div>
@@ -82,9 +85,9 @@ app.innerHTML = `
         <aside class="playlist-panel" aria-label="视频列表">
           <div class="playlist-header">
             <div>
-              <span class="eyebrow">播放目录</span>
-              <h2>选择视频</h2>
-              <p>点击条目即可切换</p>
+              <span class="eyebrow">媒体库</span>
+              <h2>视频目录</h2>
+              <p>选一部视频开始播放</p>
             </div>
             <span id="videoCount" class="video-count">0 部</span>
           </div>
@@ -127,9 +130,6 @@ refs.videoList.addEventListener('click', handleVideoListClick)
 refs.previousButton.addEventListener('click', () => selectAdjacentVideo(-1))
 refs.nextButton.addEventListener('click', () => selectAdjacentVideo(1))
 refs.copyButton.addEventListener('click', copyShareLink)
-refs.player.addEventListener('error', () => {
-  refs.statusText.textContent = '视频无法播放，请确认文件格式受浏览器支持'
-})
 
 loadVideos()
 
@@ -143,13 +143,14 @@ async function loadVideos(preferredId = '') {
 
     const videoToSelect = state.videos.find(({ id }) => id === preferredId)
       || state.videos.find(({ id }) => id === requestedVideoId)
-      || state.videos[0]
 
     if (videoToSelect) {
       selectVideo(videoToSelect.id)
     } else {
       updateNavigation()
-      refs.statusText.textContent = isDevelopmentMode ? '目录为空，点击右上角上传视频' : '目录中还没有视频'
+      refs.statusText.textContent = state.videos.length
+        ? '请选择一部视频开始播放'
+        : isDevelopmentMode ? '目录为空，点击右上角上传视频' : '目录中还没有视频'
     }
   } catch (error) {
     refs.statusText.textContent = error.message || '视频目录读取失败'
@@ -168,10 +169,16 @@ function renderVideoList() {
   refs.videoList.innerHTML = state.videos.map((video, index) => `
     <div class="video-item" data-video-id="${escapeHtml(video.id)}">
       <button class="video-select" type="button" aria-label="播放 ${escapeHtml(video.name)}" aria-pressed="false">
-        <span class="video-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
+        <span class="video-thumb" aria-hidden="true">
+          <span class="video-index">${String(index + 1).padStart(2, '0')}</span>
+          <span class="video-thumb-glyph">▶</span>
+        </span>
         <span class="video-copy">
           <strong>${escapeHtml(video.name)}</strong>
-          <small>${escapeHtml(formatBytes(video.size))} · ${escapeHtml(formatDate(video.createdAt))}</small>
+          <small>
+            <span>${escapeHtml(formatBytes(video.size))}</span>
+            <span>${escapeHtml(formatDate(video.createdAt))}</span>
+          </small>
         </span>
         <span class="video-arrow" aria-hidden="true">›</span>
       </button>
@@ -188,24 +195,23 @@ function handleVideoListClick(event) {
   }
 
   const item = event.target.closest('[data-video-id]')
-  if (item) selectVideo(item.dataset.videoId)
+  if (item) selectVideo(item.dataset.videoId, { revealInList: true })
 }
 
-function selectVideo(videoId) {
+function selectVideo(videoId, { revealInList = false } = {}) {
   const video = state.videos.find((item) => item.id === videoId)
   if (!video) return
 
   const videoIndex = state.videos.findIndex((item) => item.id === videoId)
   state.selectedVideoId = video.id
-  refs.player.src = video.streamUrl
   refs.player.classList.add('is-visible')
   refs.playerPlaceholder.classList.add('hidden')
-  refs.player.load()
+  setPlayerSource(video.streamUrl)
   refs.videoTitle.textContent = video.name
   refs.videoMeta.textContent = `${formatBytes(video.size)} · ${formatDate(video.createdAt)}`
   refs.shareLink.value = createShareUrl(video.id)
   refs.copyButton.disabled = false
-  refs.statusText.textContent = '点击播放，也可以复制链接分享'
+  refs.statusText.textContent = '已准备好，点击播放器开始播放'
   document.title = `${video.name} · 视频库`
   updateNavigation(videoIndex)
 
@@ -217,14 +223,53 @@ function selectVideo(videoId) {
 
   const selectedItem = [...refs.videoList.querySelectorAll('[data-video-id]')]
     .find((item) => item.dataset.videoId === video.id)
-  selectedItem?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  if (revealInList && window.matchMedia('(min-width: 861px)').matches) {
+    selectedItem?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }
+}
+
+function setPlayerSource(streamUrl) {
+  destroyPlayer()
+
+  try {
+    const player = new Player({
+      id: 'player',
+      url: streamUrl,
+      width: '100%',
+      height: '100%',
+      videoFillMode: 'contain',
+      videoInit: true,
+      controls: true,
+      autoplay: false,
+      playsinline: true,
+      lang: 'zh-cn',
+      videoConfig: {
+        preload: 'metadata'
+      }
+    })
+
+    player.on('error', handlePlayerError)
+    state.player = player
+  } catch {
+    handlePlayerError()
+  }
+}
+
+function destroyPlayer() {
+  if (!state.player) return
+  state.player.destroy()
+  state.player = null
+}
+
+function handlePlayerError() {
+  refs.statusText.textContent = '视频无法播放，请确认文件格式受浏览器支持'
 }
 
 function selectAdjacentVideo(direction) {
   const currentIndex = state.videos.findIndex((video) => video.id === state.selectedVideoId)
   const nextIndex = currentIndex + direction
   const nextVideo = state.videos[nextIndex]
-  if (nextVideo) selectVideo(nextVideo.id)
+  if (nextVideo) selectVideo(nextVideo.id, { revealInList: true })
 }
 
 function updateNavigation(currentIndex = state.videos.findIndex((video) => video.id === state.selectedVideoId)) {
@@ -263,6 +308,12 @@ function uploadVideo(file) {
   request.upload.onprogress = (event) => {
     if (!event.lengthComputable) return
     const percent = Math.round((event.loaded / event.total) * 100)
+    if (percent >= 100) {
+      refs.uploadButton.innerHTML = '<span>⋯</span>整理视频中'
+      refs.statusText.textContent = '上传完成，正在整理视频，请稍候…'
+      return
+    }
+
     refs.uploadButton.innerHTML = `<span>↑</span>上传中 ${percent}%`
     refs.statusText.textContent = `正在上传 ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`
   }
@@ -316,9 +367,7 @@ async function deleteVideo(videoId) {
   }
 
   if (state.selectedVideoId === videoId) {
-    refs.player.pause()
-    refs.player.removeAttribute('src')
-    refs.player.load()
+    destroyPlayer()
     refs.player.classList.remove('is-visible')
     refs.playerPlaceholder.classList.remove('hidden')
     refs.videoTitle.textContent = '尚未选择视频'

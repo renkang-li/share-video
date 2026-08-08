@@ -48,7 +48,36 @@ docker run -d --name share-video --restart unless-stopped \
 PORT=8078
 HOST=0.0.0.0
 VIDEO_DIR=shared-videos
+# 默认开启 MP4/MOV 的无损 faststart；设为 false 可关闭
+VIDEO_FASTSTART=true
+# 如果 ffmpeg 不在 PATH 中，可指定完整路径
+FFMPEG_PATH=/usr/bin/ffmpeg
 ```
+
+上传 MP4/MOV 后，服务会使用 FFmpeg 进行无损重封装，把 `moov` 元数据移到文件开头；不会降低画质，也不会降低码率。首次处理大文件需要等待一段时间，并需要额外临时磁盘空间。
+
+处理已有视频：
+
+```bash
+npm run optimize-videos
+```
+
+如果需要强制重新处理已经是 faststart 的文件：
+
+```bash
+npm run optimize-videos -- --force
+```
+
+Docker 部署可使用同一个镜像执行批处理：
+
+```bash
+docker run --rm \
+  -v "$(pwd)/shared-videos:/app/shared-videos" \
+  -e VIDEO_DIR=/app/shared-videos \
+  share-video:latest npm run optimize-videos
+```
+
+直接部署时需要先安装 FFmpeg；Docker 镜像会自动安装。视频处理失败时不会把未完成的临时文件加入目录。
 
 如果前面有 Nginx，大文件上传时需要调大上传限制：
 

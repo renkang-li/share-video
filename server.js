@@ -4,12 +4,14 @@ import { randomUUID } from 'node:crypto'
 import { basename, extname, join, resolve } from 'node:path'
 import express from 'express'
 import multer from 'multer'
+import { optimizeForStreaming } from './video-processing.js'
 
 const PORT = Number(process.env.PORT || 8078)
 const HOST = process.env.HOST || '0.0.0.0'
 const DIST_DIR = resolve('dist')
 const VIDEO_DIR = resolve(process.env.VIDEO_DIR || 'shared-videos')
 const VIDEO_INDEX_PATH = join(VIDEO_DIR, 'index.json')
+const VIDEO_FASTSTART_ENABLED = process.env.VIDEO_FASTSTART !== 'false'
 const VIDEO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const videos = new Map()
 let indexWrite = Promise.resolve()
@@ -114,27 +116,49 @@ app.post('/api/videos', (request, response, next) => {
       return
     }
 
-    const uploadInfo = request.uploadInfo || {
-      id: randomUUID(),
-      filename: basename(file.path)
-    }
-    const video = {
-      id: uploadInfo.id,
-      name: getSafeVideoName(file.originalname),
-      filename: uploadInfo.filename,
-      mimeType: getVideoMimeType(file.originalname, file.mimetype),
-      size: file.size,
-      createdAt: new Date().toISOString()
-    }
+    let video
+    const optimizationAbort = new AbortController()
+    const abortOptimization = () => optimizationAbort.abort()
+    request.once('aborted', abortOptimization)
 
     try {
+      if (VIDEO_FASTSTART_ENABLED) {
+        const optimization = await optimizeForStreaming(file.path, {
+          force: true,
+          signal: optimizationAbort.signal,
+          onTemporaryPath(temporaryPath) {
+            request.uploadTempPaths = [...(request.uploadTempPaths || []), temporaryPath]
+          }
+        })
+
+        if (optimization.optimized) {
+          console.log(`[videos] streaming normalization completed: ${file.originalname}`)
+        }
+      }
+
+      const uploadInfo = request.uploadInfo || {
+        id: randomUUID(),
+        filename: basename(file.path)
+      }
+      const fileStat = await stat(file.path)
+      video = {
+        id: uploadInfo.id,
+        name: getSafeVideoName(file.originalname),
+        filename: uploadInfo.filename,
+        mimeType: getVideoMimeType(file.originalname, file.mimetype),
+        size: fileStat.size,
+        createdAt: new Date().toISOString()
+      }
+
       videos.set(video.id, video)
       await persistVideoIndex()
       response.status(201).json(publicVideo(video))
-    } catch (persistError) {
-      videos.delete(video.id)
-      await cleanupFiles(file.path)
-      next(persistError)
+    } catch (error) {
+      if (video) videos.delete(video.id)
+      await cleanupFiles(...(request.uploadTempPaths || []))
+      next(error)
+    } finally {
+      request.off('aborted', abortOptimization)
     }
   })
 })
@@ -200,6 +224,7 @@ app.get('/api/videos/:videoId/stream', async (request, response) => {
   response.setHeader('Accept-Ranges', 'bytes')
   response.setHeader('Content-Disposition', inlineContentDisposition(video.name))
   response.setHeader('Cache-Control', 'public, max-age=3600')
+  response.setHeader('X-Accel-Buffering', 'no')
 
   if (range) {
     response.setHeader('Content-Range', `bytes ${start}-${end}/${fileStat.size}`)
@@ -210,7 +235,18 @@ app.get('/api/videos/:videoId/stream', async (request, response) => {
     return
   }
 
-  createReadStream(filePath, { start, end }).pipe(response)
+  const stream = createReadStream(filePath, { start, end })
+  const destroyStream = () => stream.destroy()
+  response.once('close', destroyStream)
+  request.once('aborted', destroyStream)
+  stream.once('close', () => {
+    response.off('close', destroyStream)
+    request.off('aborted', destroyStream)
+  })
+  stream.once('error', (error) => {
+    if (!response.destroyed) response.destroy(error)
+  })
+  stream.pipe(response)
 })
 
 app.use(express.json({ limit: '1mb' }))
