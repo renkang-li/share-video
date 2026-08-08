@@ -768,6 +768,44 @@ h1 {
   display: none !important;
 }
 
+.scroll-top-btn {
+  display: grid;
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 99;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--text);
+  background-color: var(--panel-raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.scroll-top-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background-color: var(--panel-hover);
+  transform: translateY(-2px);
+}
+
+.scroll-top-btn:active {
+  transform: translateY(0);
+}
+
+.scroll-top-btn.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+}
+
+
 @media (max-width: 1100px) {
   .directory-panel {
     padding: 24px;
