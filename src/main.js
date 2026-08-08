@@ -65,7 +65,7 @@ app.innerHTML = `
                 </svg>
               </div>
               <strong>选一部视频开始播放</strong>
-              <span>支持在线播放，提供全屏体验与快捷键支持（← / → 切换视频）</span>
+              <span>支持在线播放，提供全屏体验与快捷键控制（← / → 切换，Space 暂停/播放）</span>
             </div>
           </div>
 
@@ -168,8 +168,8 @@ refs.uploadInput.addEventListener('change', (event) => {
   if (file) uploadVideo(file)
 })
 refs.videoList.addEventListener('click', handleVideoListClick)
-refs.previousButton.addEventListener('click', () => selectAdjacentVideo(-1))
-refs.nextButton.addEventListener('click', () => selectAdjacentVideo(1))
+refs.previousButton.addEventListener('click', () => selectAdjacentVideo(-1, { autoPlay: true }))
+refs.nextButton.addEventListener('click', () => selectAdjacentVideo(1, { autoPlay: true }))
 refs.copyButton.addEventListener('click', copyShareLink)
 
 refs.searchInput.addEventListener('input', (e) => {
@@ -180,6 +180,16 @@ refs.searchInput.addEventListener('input', (e) => {
     refs.clearSearchButton.classList.add('hidden')
   }
   renderVideoList()
+})
+
+refs.searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    state.searchQuery = ''
+    refs.searchInput.value = ''
+    refs.clearSearchButton.classList.add('hidden')
+    renderVideoList()
+    refs.searchInput.blur()
+  }
 })
 
 refs.clearSearchButton.addEventListener('click', () => {
@@ -195,10 +205,10 @@ window.addEventListener('keydown', (event) => {
 
   if (event.key === 'ArrowLeft') {
     event.preventDefault()
-    selectAdjacentVideo(-1)
+    selectAdjacentVideo(-1, { autoPlay: true })
   } else if (event.key === 'ArrowRight') {
     event.preventDefault()
-    selectAdjacentVideo(1)
+    selectAdjacentVideo(1, { autoPlay: true })
   } else if ((event.key === ' ' || event.key === 'k') && state.player) {
     event.preventDefault()
     if (state.player.paused) {
@@ -309,10 +319,10 @@ function handleVideoListClick(event) {
   }
 
   const item = event.target.closest('[data-video-id]')
-  if (item) selectVideo(item.dataset.videoId, { revealInList: true })
+  if (item) selectVideo(item.dataset.videoId, { revealInList: true, autoPlay: true })
 }
 
-function selectVideo(videoId, { revealInList = false } = {}) {
+function selectVideo(videoId, { revealInList = false, autoPlay = false } = {}) {
   const video = state.videos.find((item) => item.id === videoId)
   if (!video) return
 
@@ -320,12 +330,12 @@ function selectVideo(videoId, { revealInList = false } = {}) {
   state.selectedVideoId = video.id
   refs.player.classList.add('is-visible')
   refs.playerPlaceholder.classList.add('hidden')
-  setPlayerSource(video.streamUrl)
+  setPlayerSource(video.streamUrl, autoPlay)
   refs.videoTitle.textContent = video.name
   refs.videoMeta.textContent = `${formatBytes(video.size)} · ${formatDate(video.createdAt)}`
   refs.shareLink.value = createShareUrl(video.id)
   refs.copyButton.disabled = false
-  refs.statusText.textContent = '已准备好，点击播放器开始播放'
+  refs.statusText.textContent = autoPlay ? `正在播放：${video.name}` : '已准备好，点击播放器开始播放'
   document.title = `${video.name} · 视频库`
   updateNavigation(videoIndex)
 
@@ -338,7 +348,7 @@ function selectVideo(videoId, { revealInList = false } = {}) {
   }
 }
 
-function setPlayerSource(streamUrl) {
+function setPlayerSource(streamUrl, autoPlay = false) {
   destroyPlayer()
 
   try {
@@ -350,7 +360,7 @@ function setPlayerSource(streamUrl) {
       videoFillMode: 'contain',
       videoInit: true,
       controls: true,
-      autoplay: false,
+      autoplay: autoPlay,
       playsinline: true,
       lang: 'zh-cn',
       videoConfig: {
@@ -358,6 +368,9 @@ function setPlayerSource(streamUrl) {
       }
     })
 
+    player.on('ended', () => {
+      selectAdjacentVideo(1, { autoPlay: true })
+    })
     player.on('error', handlePlayerError)
     state.player = player
   } catch {
@@ -375,11 +388,11 @@ function handlePlayerError() {
   refs.statusText.textContent = '视频无法播放，请确认文件格式受浏览器支持'
 }
 
-function selectAdjacentVideo(direction) {
+function selectAdjacentVideo(direction, options = {}) {
   const currentIndex = state.videos.findIndex((video) => video.id === state.selectedVideoId)
   const nextIndex = currentIndex + direction
   const nextVideo = state.videos[nextIndex]
-  if (nextVideo) selectVideo(nextVideo.id, { revealInList: true })
+  if (nextVideo) selectVideo(nextVideo.id, { revealInList: true, ...options })
 }
 
 function updateNavigation(currentIndex = state.videos.findIndex((video) => video.id === state.selectedVideoId)) {
