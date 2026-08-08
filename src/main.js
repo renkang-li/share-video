@@ -10,6 +10,7 @@ const app = document.querySelector('#app')
 const state = {
   videos: [],
   selectedVideoId: '',
+  searchQuery: '',
   player: null,
   uploadRequest: null,
   isUploading: false
@@ -20,19 +21,29 @@ app.innerHTML = `
     <section class="directory-panel">
       <header class="directory-header">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">▶</div>
+          <div class="brand-mark" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </div>
           <div class="brand-copy">
             <span class="eyebrow">私人视频空间</span>
             <h1>视频库</h1>
-            <p>选一部视频，马上开始观看。</p>
+            <p>选一部视频，马上开始高清在线观看与分享。</p>
           </div>
         </div>
 
         <div class="header-actions">
-          <span id="modeBadge" class="mode-badge hidden"><span class="mode-dot" aria-hidden="true"></span>开发者模式</span>
+          <span id="modeBadge" class="mode-badge hidden">
+            <span class="mode-dot" aria-hidden="true"></span>开发者模式
+          </span>
           <button id="uploadButton" class="primary-button hidden" type="button">
-            <span class="button-icon" aria-hidden="true">＋</span>
-            上传视频
+            <svg class="btn-svg-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span class="upload-btn-text">上传视频</span>
           </button>
           <input id="uploadInput" type="file" accept="video/*" hidden />
         </div>
@@ -48,9 +59,13 @@ app.innerHTML = `
           <div class="player-wrap">
             <div id="player" aria-label="视频播放器"></div>
             <div id="playerPlaceholder" class="player-placeholder">
-              <div class="placeholder-icon">▶</div>
+              <div class="placeholder-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </div>
               <strong>选一部视频开始播放</strong>
-              <span>支持在线播放，也可以复制链接分享</span>
+              <span>支持在线播放，提供全屏体验与快捷键支持（← / → 切换视频）</span>
             </div>
           </div>
 
@@ -64,19 +79,29 @@ app.innerHTML = `
             </div>
             <div class="player-actions">
               <div class="navigation-row" aria-label="切换视频">
-                <button id="previousButton" class="secondary-button navigation-button" type="button" disabled>
-                  <span aria-hidden="true">‹</span>
+                <button id="previousButton" class="secondary-button navigation-button" type="button" disabled title="快捷键: ←">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                  </svg>
                   <span>上一部</span>
                 </button>
                 <span id="currentPosition" class="selection-position" aria-live="polite">00 / 00</span>
-                <button id="nextButton" class="secondary-button navigation-button" type="button" disabled>
+                <button id="nextButton" class="secondary-button navigation-button" type="button" disabled title="快捷键: →">
                   <span>下一部</span>
-                  <span aria-hidden="true">›</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
                 </button>
               </div>
               <div class="share-row">
                 <input id="shareLink" type="text" readonly placeholder="选择视频后生成分享链接" aria-label="视频分享链接" />
-                <button id="copyButton" class="secondary-button" type="button" disabled>复制链接</button>
+                <button id="copyButton" class="secondary-button copy-btn" type="button" disabled>
+                  <svg class="btn-svg-icon copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <span class="copy-text">复制链接</span>
+                </button>
               </div>
             </div>
           </div>
@@ -84,12 +109,26 @@ app.innerHTML = `
 
         <aside class="playlist-panel" aria-label="视频列表">
           <div class="playlist-header">
-            <div>
-              <span class="eyebrow">媒体库</span>
-              <h2>视频目录</h2>
-              <p>选一部视频开始播放</p>
+            <div class="playlist-title-area">
+              <div>
+                <span class="eyebrow">媒体库</span>
+                <h2>视频目录</h2>
+              </div>
+              <span id="videoCount" class="video-count">0 部</span>
             </div>
-            <span id="videoCount" class="video-count">0 部</span>
+            <div class="search-box">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input id="searchInput" type="text" placeholder="搜索视频名称..." aria-label="搜索视频" />
+              <button id="clearSearchButton" class="clear-search-btn hidden" type="button" aria-label="清空搜索">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
           </div>
           <div id="videoList" class="video-list"></div>
         </aside>
@@ -113,7 +152,9 @@ const refs = {
   shareLink: document.querySelector('#shareLink'),
   copyButton: document.querySelector('#copyButton'),
   videoCount: document.querySelector('#videoCount'),
-  videoList: document.querySelector('#videoList')
+  videoList: document.querySelector('#videoList'),
+  searchInput: document.querySelector('#searchInput'),
+  clearSearchButton: document.querySelector('#clearSearchButton')
 }
 
 if (isDevelopmentMode) {
@@ -130,6 +171,50 @@ refs.videoList.addEventListener('click', handleVideoListClick)
 refs.previousButton.addEventListener('click', () => selectAdjacentVideo(-1))
 refs.nextButton.addEventListener('click', () => selectAdjacentVideo(1))
 refs.copyButton.addEventListener('click', copyShareLink)
+
+refs.searchInput.addEventListener('input', (e) => {
+  state.searchQuery = e.target.value
+  if (state.searchQuery) {
+    refs.clearSearchButton.classList.remove('hidden')
+  } else {
+    refs.clearSearchButton.classList.add('hidden')
+  }
+  renderVideoList()
+})
+
+refs.clearSearchButton.addEventListener('click', () => {
+  state.searchQuery = ''
+  refs.searchInput.value = ''
+  refs.clearSearchButton.classList.add('hidden')
+  renderVideoList()
+})
+
+// Keyboard shortcuts for ergonomic control
+window.addEventListener('keydown', (event) => {
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return
+
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    selectAdjacentVideo(-1)
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    selectAdjacentVideo(1)
+  } else if ((event.key === ' ' || event.key === 'k') && state.player) {
+    event.preventDefault()
+    if (state.player.paused) {
+      state.player.play()
+    } else {
+      state.player.pause()
+    }
+  } else if ((event.key === 'f' || event.key === 'F') && state.player) {
+    event.preventDefault()
+    if (typeof state.player.getFullscreen === 'function' && state.player.getFullscreen()) {
+      state.player.exitFullscreen()
+    } else if (typeof state.player.requestFullscreen === 'function') {
+      state.player.requestFullscreen()
+    }
+  }
+})
 
 loadVideos()
 
@@ -159,32 +244,61 @@ async function loadVideos(preferredId = '') {
 }
 
 function renderVideoList() {
-  refs.videoCount.textContent = `${state.videos.length} 部`
+  const searchTerm = state.searchQuery.trim().toLowerCase()
+  const filteredVideos = state.videos.filter(video => 
+    !searchTerm || video.name.toLowerCase().includes(searchTerm)
+  )
 
-  if (!state.videos.length) {
-    refs.videoList.innerHTML = `<p class="empty-list">${isDevelopmentMode ? '还没有视频，点击上方上传。' : '暂时还没有可播放的视频。'}</p>`
+  refs.videoCount.textContent = searchTerm 
+    ? `${filteredVideos.length} / ${state.videos.length} 部`
+    : `${state.videos.length} 部`
+
+  if (!filteredVideos.length) {
+    const emptyText = searchTerm 
+      ? '没有找到匹配的视频'
+      : isDevelopmentMode ? '还没有视频，点击上方上传。' : '暂时还没有可播放的视频。'
+    refs.videoList.innerHTML = `<p class="empty-list">${emptyText}</p>`
     return
   }
 
-  refs.videoList.innerHTML = state.videos.map((video, index) => `
-    <div class="video-item" data-video-id="${escapeHtml(video.id)}">
-      <button class="video-select" type="button" aria-label="播放 ${escapeHtml(video.name)}" aria-pressed="false">
-        <span class="video-thumb" aria-hidden="true">
-          <span class="video-index">${String(index + 1).padStart(2, '0')}</span>
-          <span class="video-thumb-glyph">▶</span>
-        </span>
-        <span class="video-copy">
-          <strong>${escapeHtml(video.name)}</strong>
-          <small>
-            <span>${escapeHtml(formatBytes(video.size))}</span>
-            <span>${escapeHtml(formatDate(video.createdAt))}</span>
-          </small>
-        </span>
-        <span class="video-arrow" aria-hidden="true">›</span>
-      </button>
-      ${isDevelopmentMode ? `<button class="delete-button" type="button" data-delete-id="${escapeHtml(video.id)}" aria-label="删除 ${escapeHtml(video.name)}">×</button>` : ''}
-    </div>
-  `).join('')
+  refs.videoList.innerHTML = filteredVideos.map((video) => {
+    const originalIndex = state.videos.findIndex(v => v.id === video.id)
+    const isSelected = video.id === state.selectedVideoId
+    return `
+      <div class="video-item ${isSelected ? 'is-selected' : ''}" data-video-id="${escapeHtml(video.id)}">
+        <button class="video-select" type="button" aria-label="播放 ${escapeHtml(video.name)}" aria-pressed="${isSelected}">
+          <span class="video-thumb" aria-hidden="true">
+            <span class="video-index">${String(originalIndex + 1).padStart(2, '0')}</span>
+            <span class="video-thumb-glyph">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </span>
+          </span>
+          <span class="video-copy">
+            <strong title="${escapeHtml(video.name)}">${escapeHtml(video.name)}</strong>
+            <small>
+              <span>${escapeHtml(formatBytes(video.size))}</span>
+              <span>${escapeHtml(formatDate(video.createdAt))}</span>
+            </small>
+          </span>
+          <span class="video-arrow" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </span>
+        </button>
+        ${isDevelopmentMode ? `
+          <button class="delete-button" type="button" data-delete-id="${escapeHtml(video.id)}" aria-label="删除 ${escapeHtml(video.name)}" title="删除视频">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+        ` : ''}
+      </div>
+    `
+  }).join('')
 }
 
 function handleVideoListClick(event) {
@@ -215,11 +329,7 @@ function selectVideo(videoId, { revealInList = false } = {}) {
   document.title = `${video.name} · 视频库`
   updateNavigation(videoIndex)
 
-  refs.videoList.querySelectorAll('[data-video-id]').forEach((item) => {
-    const isSelected = item.dataset.videoId === video.id
-    item.classList.toggle('is-selected', isSelected)
-    item.querySelector('.video-select')?.setAttribute('aria-pressed', String(isSelected))
-  })
+  renderVideoList()
 
   const selectedItem = [...refs.videoList.querySelectorAll('[data-video-id]')]
     .find((item) => item.dataset.videoId === video.id)
@@ -290,12 +400,38 @@ function createShareUrl(videoId) {
   return shareUrl.toString()
 }
 
+let copyTimeout = null
+async function copyShareLink() {
+  if (!refs.shareLink.value) return
+
+  try {
+    await navigator.clipboard.writeText(refs.shareLink.value)
+  } catch {
+    refs.shareLink.select()
+    document.execCommand('copy')
+  }
+
+  refs.statusText.textContent = '分享链接已复制'
+
+  refs.copyButton.classList.add('is-copied')
+  const copyText = refs.copyButton.querySelector('.copy-text')
+  const originalText = copyText ? copyText.textContent : '复制链接'
+  if (copyText) copyText.textContent = '已复制！'
+
+  if (copyTimeout) clearTimeout(copyTimeout)
+  copyTimeout = setTimeout(() => {
+    refs.copyButton.classList.remove('is-copied')
+    if (copyText) copyText.textContent = originalText
+  }, 2000)
+}
+
 function uploadVideo(file) {
   if (!isDevelopmentMode || state.isUploading) return
 
   state.isUploading = true
   refs.uploadButton.disabled = true
-  refs.uploadButton.innerHTML = '<span>↑</span>上传中 0%'
+  const uploadText = refs.uploadButton.querySelector('.upload-btn-text')
+  if (uploadText) uploadText.textContent = '上传中 0%'
   refs.statusText.textContent = `正在上传 ${file.name}`
 
   const formData = new FormData()
@@ -309,12 +445,12 @@ function uploadVideo(file) {
     if (!event.lengthComputable) return
     const percent = Math.round((event.loaded / event.total) * 100)
     if (percent >= 100) {
-      refs.uploadButton.innerHTML = '<span>⋯</span>整理视频中'
+      if (uploadText) uploadText.textContent = '整理视频中...'
       refs.statusText.textContent = '上传完成，正在整理视频，请稍候…'
       return
     }
 
-    refs.uploadButton.innerHTML = `<span>↑</span>上传中 ${percent}%`
+    if (uploadText) uploadText.textContent = `上传中 ${percent}%`
     refs.statusText.textContent = `正在上传 ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`
   }
 
@@ -384,20 +520,9 @@ async function deleteVideo(videoId) {
 function finishUpload() {
   state.isUploading = false
   refs.uploadButton.disabled = false
-  refs.uploadButton.innerHTML = '<span>↑</span>上传视频'
+  const uploadText = refs.uploadButton.querySelector('.upload-btn-text')
+  if (uploadText) uploadText.textContent = '上传视频'
   refs.uploadInput.value = ''
-}
-
-async function copyShareLink() {
-  if (!refs.shareLink.value) return
-
-  try {
-    await navigator.clipboard.writeText(refs.shareLink.value)
-  } catch {
-    refs.shareLink.select()
-    document.execCommand('copy')
-  }
-  refs.statusText.textContent = '分享链接已复制'
 }
 
 async function readApiError(response) {
